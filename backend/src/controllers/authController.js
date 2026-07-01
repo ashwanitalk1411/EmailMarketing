@@ -33,6 +33,36 @@ const authController = {
   logout(_req, res) {
     return ApiResponse.success(res, 'Logout successful');
   },
+
+  async getResume(req, res, next) {
+    try {
+      const resume = await authService.getResume(req.user.id);
+      return ApiResponse.success(res, 'Resume retrieved', resume);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async saveResume(req, res, next) {
+    try {
+      if (!req.file) {
+        return ApiResponse.error(res, 'Resume file is required', [], 400);
+      }
+      const resume = await authService.saveResume(req.user.id, req.file);
+      return ApiResponse.success(res, 'Resume saved successfully', resume);
+    } catch (error) {
+      next(error);
+    }
+  },
+
+  async deleteResume(req, res, next) {
+    try {
+      await authService.deleteResume(req.user.id);
+      return ApiResponse.success(res, 'Resume deleted');
+    } catch (error) {
+      next(error);
+    }
+  },
 };
 
 module.exports = authController;

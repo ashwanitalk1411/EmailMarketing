@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const config = require('../config');
@@ -43,7 +45,63 @@ const authService = {
       email: user.email,
       role: user.role,
       created_at: user.created_at,
+      resume_filename: user.resume_filename || null,
     };
+  },
+
+  async getResume(userId) {
+    const user = await userRepository.findById(userId);
+    if (!user) throw new AppError('User not found', 404);
+
+    if (!user.resume_path || !user.resume_filename) {
+      return null;
+    }
+
+    return {
+      filename: user.resume_filename,
+      has_resume: fs.existsSync(user.resume_path),
+    };
+  },
+
+  async saveResume(userId, file) {
+    const user = await userRepository.findById(userId);
+    if (!user) throw new AppError('User not found', 404);
+
+    const resumeDir = path.join(__dirname, '../../uploads/resumes');
+    const ext = path.extname(file.originalname);
+    const permanentPath = path.join(resumeDir, `user-${userId}-resume${ext}`);
+
+    if (user.resume_path && fs.existsSync(user.resume_path) && user.resume_path !== permanentPath) {
+      fs.unlinkSync(user.resume_path);
+    }
+
+    if (file.path !== permanentPath) {
+      fs.renameSync(file.path, permanentPath);
+    }
+
+    await userRepository.update(userId, {
+      resume_path: permanentPath,
+      resume_filename: file.originalname,
+    });
+
+    return {
+      filename: file.originalname,
+      has_resume: true,
+    };
+  },
+
+  async deleteResume(userId) {
+    const user = await userRepository.findById(userId);
+    if (!user) throw new AppError('User not found', 404);
+
+    if (user.resume_path && fs.existsSync(user.resume_path)) {
+      fs.unlinkSync(user.resume_path);
+    }
+
+    await userRepository.update(userId, {
+      resume_path: null,
+      resume_filename: null,
+    });
   },
 
   async updateProfile(userId, data) {

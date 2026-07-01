@@ -35,7 +35,7 @@ const createTransporter = async (userId) => {
   return nodemailer.createTransport(buildTransportConfig(settings));
 };
 
-const sendEmail = async ({ userId, to, subject, html }) => {
+const sendEmail = async ({ userId, to, subject, html, attachment }) => {
   const settings = await smtpRepository.getSettingsForSending(userId);
 
   if (!settings) {
@@ -47,12 +47,23 @@ const sendEmail = async ({ userId, to, subject, html }) => {
 
   const transporter = nodemailer.createTransport(buildTransportConfig(settings));
 
-  const info = await transporter.sendMail({
+  const mailOptions = {
     from: settings.username,
     to,
     subject,
     html,
-  });
+  };
+
+  if (attachment?.path) {
+    mailOptions.attachments = [
+      {
+        filename: attachment.filename,
+        path: attachment.path,
+      },
+    ];
+  }
+
+  const info = await transporter.sendMail(mailOptions);
 
   return info;
 };

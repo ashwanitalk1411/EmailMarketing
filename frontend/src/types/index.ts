@@ -49,6 +49,7 @@ export interface EmailLog {
   status: 'pending' | 'sending' | 'sent' | 'failed';
   error_message?: string;
   sent_at?: string;
+  attachment_name?: string;
   created_at: string;
   updated_at?: string;
   user_name?: string;

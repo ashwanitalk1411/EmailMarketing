@@ -119,6 +119,7 @@ export default function LogsPage() {
                   {isAdmin && <th className="text-left py-3 px-2">User</th>}
                   <th className="text-left py-3 px-2">Recipient</th>
                   <th className="text-left py-3 px-2">Subject</th>
+                  <th className="text-left py-3 px-2">Attachment</th>
                   <th className="text-left py-3 px-2">Status</th>
                   <th className="text-left py-3 px-2">Date / Time</th>
                   <th className="text-left py-3 px-2 min-w-[220px]">Reason / Error</th>
@@ -135,6 +136,9 @@ export default function LogsPage() {
                     )}
                     <td className="py-3 px-2">{log.recipient_email}</td>
                     <td className="py-3 px-2 max-w-[200px]">{log.subject}</td>
+                    <td className="py-3 px-2 text-xs text-muted truncate max-w-[120px]">
+                      {log.attachment_name ? `📎 ${log.attachment_name}` : '-'}
+                    </td>
                     <td className="py-3 px-2"><StatusBadge status={log.status} /></td>
                     <td className="py-3 px-2 text-muted whitespace-nowrap">
                       {formatLogTime(log)}

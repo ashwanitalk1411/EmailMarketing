@@ -1,11 +1,13 @@
+const fs = require('fs');
 const contactRepository = require('../repositories/contactRepository');
 const templateRepository = require('../repositories/templateRepository');
 const emailLogRepository = require('../repositories/emailLogRepository');
+const userRepository = require('../repositories/userRepository');
 const { sendEmail } = require('../emails/mailer');
 const AppError = require('../utils/AppError');
 
 const emailService = {
-  async sendBulk(userId, { contact_ids, template_id, subject }) {
+  async sendBulk(userId, { contact_ids, template_id, subject, attach_resume }, file) {
     const template = await templateRepository.findById(template_id, userId);
     if (!template) throw new AppError('Template not found', 404);
 
@@ -17,38 +19,58 @@ const emailService = {
     const emailSubject = subject?.trim() || template.subject;
     const htmlContent = template.html_content;
 
+    let attachment = null;
+    const isTempUpload = !!file;
+
+    if (file) {
+      attachment = { path: file.path, filename: file.originalname };
+    } else if (attach_resume) {
+      const user = await userRepository.findById(userId);
+      if (user?.resume_path && fs.existsSync(user.resume_path)) {
+        attachment = { path: user.resume_path, filename: user.resume_filename };
+      }
+    }
+
     const results = { sent: 0, failed: 0, total: contacts.length };
 
-    for (const contact of contacts) {
-      const [logId] = await emailLogRepository.create({
-        user_id: userId,
-        recipient_email: contact.email,
-        subject: emailSubject,
-        status: 'pending',
-      });
-
-      await emailLogRepository.update(logId, { status: 'sending' });
-
-      try {
-        await sendEmail({
-          userId,
-          to: contact.email,
+    try {
+      for (const contact of contacts) {
+        const [logId] = await emailLogRepository.create({
+          user_id: userId,
+          recipient_email: contact.email,
           subject: emailSubject,
-          html: htmlContent,
+          status: 'pending',
+          attachment_name: attachment?.filename || null,
         });
 
-        await emailLogRepository.update(logId, {
-          status: 'sent',
-          sent_at: new Date(),
-        });
-        results.sent++;
-      } catch (error) {
-        await emailLogRepository.update(logId, {
-          status: 'failed',
-          error_message: error.message,
-          sent_at: new Date(),
-        });
-        results.failed++;
+        await emailLogRepository.update(logId, { status: 'sending' });
+
+        try {
+          await sendEmail({
+            userId,
+            to: contact.email,
+            subject: emailSubject,
+            html: htmlContent,
+            attachment,
+          });
+
+          await emailLogRepository.update(logId, {
+            status: 'sent',
+            sent_at: new Date(),
+          });
+          results.sent++;
+        } catch (error) {
+          await emailLogRepository.update(logId, {
+            status: 'failed',
+            error_message: error.message,
+            sent_at: new Date(),
+          });
+          results.failed++;
+        }
+      }
+    } finally {
+      if (isTempUpload && file?.path && fs.existsSync(file.path)) {
+        fs.unlinkSync(file.path);
       }
     }
 

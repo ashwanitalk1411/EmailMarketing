@@ -4,7 +4,7 @@ const ApiResponse = require('../utils/apiResponse');
 const emailController = {
   async send(req, res, next) {
     try {
-      const result = await emailService.sendBulk(req.user.id, req.body);
+      const result = await emailService.sendBulk(req.user.id, req.body, req.file);
       return ApiResponse.success(res, 'Emails processed', result);
     } catch (error) {
       next(error);

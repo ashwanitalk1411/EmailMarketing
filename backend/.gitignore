@@ -2,4 +2,6 @@ node_modules/
 .env
 uploads/*
 !uploads/.gitkeep
+uploads/resumes/*
+!uploads/resumes/.gitkeep
 *.log

@@ -184,8 +184,17 @@ export default function ContactsPage() {
       <Modal isOpen={importModalOpen} onClose={() => setImportModalOpen(false)} title="Import Contacts">
         <div className="space-y-4">
           <p className="text-sm text-muted">
-            Upload a CSV file with columns: name, email. Duplicate emails will be skipped automatically.
+            Upload a CSV file with columns: <strong>name</strong>, <strong>email</strong>. Duplicate emails will be skipped automatically.
           </p>
+
+          <a
+            href="/sample-contacts.csv"
+            download="sample-contacts.csv"
+            className="inline-flex items-center gap-2 text-sm text-accent hover:underline bg-accent/10 px-4 py-2 rounded-lg"
+          >
+            ⬇ Download Demo CSV
+          </a>
+
           <input
             type="file"
             accept=".csv"

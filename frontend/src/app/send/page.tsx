@@ -1,11 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import Button from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { api } from '@/lib/api';
 import { Contact, Template } from '@/types';
+
+interface SavedResume {
+  filename: string;
+  has_resume: boolean;
+}
 
 export default function SendEmailPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -13,15 +18,32 @@ export default function SendEmailPage() {
   const [selectedContacts, setSelectedContacts] = useState<number[]>([]);
   const [templateId, setTemplateId] = useState<number | ''>('');
   const [subject, setSubject] = useState('');
+  const [savedResume, setSavedResume] = useState<SavedResume | null>(null);
+  const [attachResume, setAttachResume] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(true);
+  const [savingResume, setSavingResume] = useState(false);
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
   const [search, setSearch] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const loadSavedResume = async () => {
+    const res = await api.get<SavedResume | null>('/auth/resume');
+    if (res.success && res.data?.has_resume) {
+      setSavedResume(res.data);
+      setAttachResume(true);
+    } else {
+      setSavedResume(null);
+      setAttachResume(false);
+    }
+  };
 
   useEffect(() => {
     Promise.all([
       api.get<{ contacts: Contact[] }>('/contacts?limit=1000'),
       api.get<Template[]>('/templates'),
+      loadSavedResume(),
     ]).then(([contactsRes, templatesRes]) => {
       if (contactsRes.success && contactsRes.data) setContacts(contactsRes.data.contacts);
       if (templatesRes.success && templatesRes.data) setTemplates(templatesRes.data);
@@ -44,19 +66,85 @@ export default function SendEmailPage() {
     }
   };
 
+  const validateFile = (file: File) => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (!['pdf', 'doc', 'docx'].includes(ext || '')) {
+      alert('Only PDF, DOC, and DOCX files are allowed');
+      return false;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('Resume file must be under 10MB');
+      return false;
+    }
+    return true;
+  };
+
+  const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !validateFile(file)) {
+      e.target.value = '';
+      return;
+    }
+    setPendingFile(file);
+  };
+
+  const handleSaveResume = async () => {
+    if (!pendingFile) {
+      alert('Please choose a resume file first');
+      return;
+    }
+
+    setSavingResume(true);
+    const formData = new FormData();
+    formData.append('resume', pendingFile);
+
+    const res = await api.post<SavedResume>('/auth/resume', formData);
+    if (res.success && res.data) {
+      setSavedResume(res.data);
+      setAttachResume(true);
+      setPendingFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } else {
+      alert(res.message);
+    }
+    setSavingResume(false);
+  };
+
+  const handleDeleteResume = async () => {
+    if (!confirm('Remove saved resume?')) return;
+    const res = await api.delete('/auth/resume');
+    if (res.success) {
+      setSavedResume(null);
+      setAttachResume(false);
+      setPendingFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
   const handleSend = async () => {
     if (!templateId || selectedContacts.length === 0) {
       alert('Please select contacts and a template');
       return;
     }
 
+    if (attachResume && !savedResume?.has_resume) {
+      alert('Please save a resume first or uncheck "Attach resume"');
+      return;
+    }
+
     setSending(true);
     setResult(null);
-    const res = await api.post<{ sent: number; failed: number; total: number }>('/emails/send', {
-      contact_ids: selectedContacts,
-      template_id: templateId,
-      subject: subject || undefined,
-    });
+
+    const formData = new FormData();
+    formData.append('contact_ids', JSON.stringify(selectedContacts));
+    formData.append('template_id', String(templateId));
+    if (subject.trim()) formData.append('subject', subject.trim());
+    formData.append('attach_resume', String(attachResume));
+
+    const res = await api.post<{ sent: number; failed: number; total: number }>(
+      '/emails/send',
+      formData
+    );
 
     if (res.success && res.data) {
       setResult(res.data);
@@ -149,6 +237,54 @@ export default function SendEmailPage() {
             placeholder="Uses template subject if empty"
           />
 
+          <div className="border-t border-card-border pt-4 space-y-3">
+            <h3 className="text-sm font-medium">My Resume</h3>
+            <p className="text-xs text-muted">Upload once — it stays saved. No need to upload every time you send.</p>
+
+            {savedResume?.has_resume && (
+              <div className="flex items-center justify-between bg-background rounded-lg px-3 py-2 text-sm">
+                <span className="truncate text-accent">📎 {savedResume.filename}</span>
+                <button
+                  type="button"
+                  onClick={handleDeleteResume}
+                  className="text-danger hover:underline text-xs ml-2 shrink-0"
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx"
+              onChange={handleFilePick}
+              className="block w-full text-sm text-muted file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-accent file:text-white file:cursor-pointer file:text-sm"
+            />
+            {pendingFile && (
+              <p className="text-xs text-muted">Selected: {pendingFile.name}</p>
+            )}
+            <Button
+              variant="secondary"
+              onClick={handleSaveResume}
+              loading={savingResume}
+              className="w-full"
+            >
+              {savedResume?.has_resume ? 'Replace Saved Resume' : 'Save Resume'}
+            </Button>
+
+            <label className="flex items-center gap-2 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={attachResume}
+                onChange={(e) => setAttachResume(e.target.checked)}
+                disabled={!savedResume?.has_resume}
+                className="accent-accent w-4 h-4"
+              />
+              Attach resume when sending
+            </label>
+          </div>
+
           <Button
             onClick={handleSend}
             loading={sending}
@@ -156,6 +292,7 @@ export default function SendEmailPage() {
             className="w-full"
           >
             Send to {selectedContacts.length} contact{selectedContacts.length !== 1 ? 's' : ''}
+            {attachResume && savedResume?.has_resume ? ' with resume' : ''}
           </Button>
 
           {result && (
